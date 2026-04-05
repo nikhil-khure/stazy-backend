@@ -1,0 +1,82 @@
+spring:
+  application:
+    name: stazy-backend
+  datasource:
+    url: ${STAZY_DB_URL:jdbc:postgresql://localhost:5432/stazy_db}
+    username: ${STAZY_DB_USERNAME:}
+    password: ${STAZY_DB_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 200MB
+  jackson:
+    default-property-inclusion: non_null
+  cache:
+    type: caffeine
+    cache-names:
+      - listing-search
+      - listing-detail
+      - city-stats
+      - current-user
+    caffeine:
+      spec: maximumSize=1000,expireAfterWrite=10m
+  mail:
+    host: ${STAZY_MAIL_HOST:localhost}
+    port: ${STAZY_MAIL_PORT:1025}
+    username: ${STAZY_MAIL_USERNAME:}
+    password: ${STAZY_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${STAZY_MAIL_AUTH:false}
+          starttls:
+            enable: ${STAZY_MAIL_STARTTLS:false}
+
+server:
+  port: ${STAZY_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    root: INFO
+    com.stazy.backend: INFO
+
+app:
+  jwt:
+    issuer: ${STAZY_JWT_ISSUER:stazy-backend}
+    access-token-expiry-minutes: ${STAZY_JWT_ACCESS_MINUTES:30}
+    refresh-token-expiry-days: ${STAZY_JWT_REFRESH_DAYS:30}
+    secret: ${STAZY_JWT_SECRET:change-this-jwt-secret-for-production}
+  cors:
+    allowed-origins: ${STAZY_ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000}
+  otp:
+    expiry-minutes: ${STAZY_OTP_EXPIRY_MINUTES:10}
+    max-attempts: ${STAZY_OTP_MAX_ATTEMPTS:5}
+    reveal-in-response: ${STAZY_OTP_REVEAL_IN_RESPONSE:true}
+  cloudinary:
+    cloud-name: ${CLOUDINARY_CLOUD_NAME:}
+    api-key: ${CLOUDINARY_API_KEY:}
+    api-secret: ${CLOUDINARY_API_SECRET:}
+    upload-preset: ${CLOUDINARY_UPLOAD_PRESET:}
+    secure-url-prefix: ${CLOUDINARY_SECURE_PREFIX:https://res.cloudinary.com}
+  ai:
+    student-verification-url: ${STUDENT_VERIFICATION_URL:http://127.0.0.1:5000/student-verification}
+    owner-verification-url: ${OWNER_VERIFICATION_URL:http://127.0.0.1:5000/owner-verification}
+    listing-verification-url: ${LISTING_VERIFICATION_URL:http://127.0.0.1:5001/verify-listing}
