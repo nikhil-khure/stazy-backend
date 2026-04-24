@@ -1,0 +1,40 @@
+# Ignore files that shouldn't be copied to Docker image
+
+# Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+.mvn/
+mvnw
+mvnw.cmd
+
+# IDE
+.idea/
+*.iml
+*.iws
+.project
+.classpath
+.settings/
+.vscode/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+*.md
+
+# Test files
+src/test/
+
+# Environment files
+.env
+.env.local
+application-local.properties
