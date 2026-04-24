@@ -82,7 +82,7 @@ public class AdminModerationController {
             @PathVariable UUID userId,
             @Valid @RequestBody UserStatusUpdateRequest request
     ) {
-        return ApiResponse.ok("User status updated successfully.", adminModerationService.updateUserStatus(principal.getUserId(), userId, request.status()));
+        return ApiResponse.ok("User status updated successfully.", adminModerationService.updateUserStatus(principal.getUserId(), userId, request.status(), request.message()));
     }
 
     @GetMapping("/super/stats")
@@ -125,5 +125,53 @@ public class AdminModerationController {
     ) {
         adminModerationService.deleteUser(principal.getUserId(), userId);
         return ApiResponse.ok("User deleted successfully.");
+    }
+
+    @PatchMapping("/super/admins/{adminUserId}/revoke")
+    public ApiResponse<ConnectedAdminResponse> revokeAdminAccess(
+            @AuthenticationPrincipal StazyPrincipal principal,
+            @PathVariable UUID adminUserId,
+            @RequestBody(required = false) ReviewNoteRequest request
+    ) {
+        String reason = request != null ? request.reviewNotes() : null;
+        return ApiResponse.ok("Admin access revoked successfully.", 
+                adminModerationService.revokeAdminAccess(principal.getUserId(), adminUserId, reason));
+    }
+
+    @PatchMapping("/super/admins/{adminUserId}/activate")
+    public ApiResponse<ConnectedAdminResponse> activateAdminAccess(
+            @AuthenticationPrincipal StazyPrincipal principal,
+            @PathVariable UUID adminUserId
+    ) {
+        return ApiResponse.ok("Admin access activated successfully.", 
+                adminModerationService.activateAdminAccess(principal.getUserId(), adminUserId));
+    }
+
+    @DeleteMapping("/super/admins/{adminUserId}")
+    public ApiResponse<Void> deleteAdmin(
+            @AuthenticationPrincipal StazyPrincipal principal,
+            @PathVariable UUID adminUserId
+    ) {
+        adminModerationService.deleteAdmin(principal.getUserId(), adminUserId);
+        return ApiResponse.ok("Admin deleted successfully.");
+    }
+
+    @GetMapping("/owner/available-admins")
+    public ApiResponse<List<ConnectedAdminResponse>> getAvailableAdmins(
+            @AuthenticationPrincipal StazyPrincipal principal
+    ) {
+        return ApiResponse.ok("Available admins loaded successfully.", 
+                adminModerationService.getActiveAdminsForOwner(principal.getUserId()));
+    }
+
+    @GetMapping("/owner/matching-admin")
+    public ApiResponse<ConnectedAdminResponse> getMatchingAdmin(
+            @AuthenticationPrincipal StazyPrincipal principal
+    ) {
+        ConnectedAdminResponse admin = adminModerationService.findMatchingAdminForOwner(principal.getUserId());
+        if (admin == null) {
+            return ApiResponse.ok("No matching admin found. Please select an admin manually.", null);
+        }
+        return ApiResponse.ok("Matching admin found.", admin);
     }
 }

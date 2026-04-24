@@ -28,4 +28,8 @@ public interface ComplaintRepository extends JpaRepository<Complaint, UUID> {
     long countByAgainstUserAndStatusIn(User againstUser, Collection<ComplaintStatus> statuses);
 
     long countByAgainstUserAndStatus(User againstUser, ComplaintStatus status);
+
+    void deleteByComplainantUserAndAgainstUser(User complainantUser, User againstUser);
+
+    void deleteByAgainstUserAndComplainantUser(User againstUser, User complainantUser);
 }

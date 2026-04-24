@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stazy.backend.common.config.AppProperties;
 import com.stazy.backend.common.exception.BadRequestException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.net.URI;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -19,6 +21,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class AiVerificationClient {
+
+    private static final Logger logger = LoggerFactory.getLogger(AiVerificationClient.class);
 
     private static final List<String> LISTING_ENDPOINT_FALLBACK_PATHS = List.of(
             "/verify-listing",
@@ -105,8 +109,10 @@ public class AiVerificationClient {
     }
 
     private JsonNode executeMultipart(String url, MultiValueMap<String, Object> body) throws Exception {
-        System.out.println("🔥 CALLING FLASK URL: " + url);
-        System.out.println("🔥 BODY KEYS: " + body.keySet());
+        if (logger.isDebugEnabled()) {
+            logger.debug("Calling AI verification URL: {}", url);
+            logger.debug("Request body keys: {}", body.keySet());
+        }
         RestClient client = restClientBuilder.build();
         String responseBody = client.post()
                 .uri(url)

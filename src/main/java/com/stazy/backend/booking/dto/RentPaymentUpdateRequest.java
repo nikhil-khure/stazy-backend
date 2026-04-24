@@ -5,8 +5,7 @@ import java.time.LocalDate;
 
 public record RentPaymentUpdateRequest(
         PaymentStatus status,
-        LocalDate dueDate,
         String reminderMessage,
-        String notes
+        String ownerReminder
 ) {
 }

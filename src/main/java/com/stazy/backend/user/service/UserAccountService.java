@@ -53,6 +53,12 @@ public class UserAccountService {
         userRepository.save(user);
     }
 
+    @Transactional(readOnly = true)
+    public void verifyPassword(UUID userId, String currentPassword) {
+        User user = currentUserService.requireUser(userId);
+        verifyCurrentPassword(user, currentPassword);
+    }
+
     private void verifyCurrentPassword(User user, String rawPassword) {
         if (user.getPasswordHash() == null || !passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
             throw new UnauthorizedException("Current password is incorrect.");

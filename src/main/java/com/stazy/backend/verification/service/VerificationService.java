@@ -16,7 +16,10 @@ import com.stazy.backend.listing.entity.ListingMedia;
 import com.stazy.backend.listing.repository.ListingMediaRepository;
 import com.stazy.backend.listing.repository.ListingRepository;
 import com.stazy.backend.profile.entity.OwnerProfile;
+import com.stazy.backend.profile.entity.StudentProfile;
 import com.stazy.backend.profile.repository.OwnerProfileRepository;
+import com.stazy.backend.profile.repository.StudentProfileRepository;
+import com.stazy.backend.profile.service.ProfileCompletionService;
 import com.stazy.backend.user.entity.User;
 import com.stazy.backend.user.repository.UserRepository;
 import com.stazy.backend.user.service.CurrentUserService;
@@ -31,6 +34,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +44,7 @@ public class VerificationService {
     private final CurrentUserService currentUserService;
     private final UserRepository userRepository;
     private final OwnerProfileRepository ownerProfileRepository;
+    private final StudentProfileRepository studentProfileRepository;
     private final ListingRepository listingRepository;
     private final ListingMediaRepository listingMediaRepository;
     private final VerificationRequestRepository verificationRequestRepository;
@@ -47,22 +52,26 @@ public class VerificationService {
     private final CloudinaryService cloudinaryService;
     private final AiVerificationClient aiVerificationClient;
     private final ObjectMapper objectMapper;
+    private final ProfileCompletionService profileCompletionService;
 
     public VerificationService(
             CurrentUserService currentUserService,
             UserRepository userRepository,
             OwnerProfileRepository ownerProfileRepository,
+            StudentProfileRepository studentProfileRepository,
             ListingRepository listingRepository,
             ListingMediaRepository listingMediaRepository,
             VerificationRequestRepository verificationRequestRepository,
             VerificationAttachmentRepository verificationAttachmentRepository,
             CloudinaryService cloudinaryService,
             AiVerificationClient aiVerificationClient,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            ProfileCompletionService profileCompletionService
     ) {
         this.currentUserService = currentUserService;
         this.userRepository = userRepository;
         this.ownerProfileRepository = ownerProfileRepository;
+        this.studentProfileRepository = studentProfileRepository;
         this.listingRepository = listingRepository;
         this.listingMediaRepository = listingMediaRepository;
         this.verificationRequestRepository = verificationRequestRepository;
@@ -70,6 +79,7 @@ public class VerificationService {
         this.cloudinaryService = cloudinaryService;
         this.aiVerificationClient = aiVerificationClient;
         this.objectMapper = objectMapper;
+        this.profileCompletionService = profileCompletionService;
     }
 
     @Transactional
@@ -132,6 +142,7 @@ public class VerificationService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = {"listing-search", "listing-detail"}, allEntries = true)
     public VerificationResultResponse verifyListing(UUID reviewerId, UUID listingId) {
         User reviewer = currentUserService.requireUser(reviewerId);
         if (reviewer.getPrimaryRoleCode() != RoleName.ADMIN && reviewer.getPrimaryRoleCode() != RoleName.SUPER_ADMIN) {
@@ -140,11 +151,15 @@ public class VerificationService {
         Listing listing = listingRepository.findById(listingId)
                 .orElseThrow(() -> new NotFoundException("Listing not found."));
         List<ListingMedia> media = listingMediaRepository.findByListingOrderBySortOrderAsc(listing);
+        
+        // Get owner live video
         String ownerLiveVideoUrl = media.stream()
                 .filter(item -> item.getMediaType() == com.stazy.backend.common.enums.MediaType.VIDEO)
                 .map(ListingMedia::getUrl)
                 .findFirst()
                 .orElseThrow(() -> new BadRequestException("Listing does not have an owner live video."));
+        
+        // Get room images
         List<String> roomImageUrls = media.stream()
                 .filter(item -> item.getMediaType() == com.stazy.backend.common.enums.MediaType.IMAGE)
                 .map(ListingMedia::getUrl)
@@ -152,10 +167,13 @@ public class VerificationService {
         if (roomImageUrls.isEmpty()) {
             throw new BadRequestException("Listing does not have room images.");
         }
-        String ownerPhotoUrl = listing.getOwnerUser().getProfilePhotoUrl();
-        if (ownerPhotoUrl == null || ownerPhotoUrl.isBlank()) {
-            throw new BadRequestException("Owner profile photo is required before listing verification.");
-        }
+        
+        // Get owner photo from listing media (NOT profile photo)
+        String ownerPhotoUrl = media.stream()
+                .filter(item -> item.getMediaType() == com.stazy.backend.common.enums.MediaType.OWNER_PHOTO)
+                .map(ListingMedia::getUrl)
+                .findFirst()
+                .orElseThrow(() -> new BadRequestException("Owner photo is required for listing verification."));
 
         VerificationRequest verificationRequest = new VerificationRequest();
         verificationRequest.setListing(listing);
@@ -218,6 +236,18 @@ public class VerificationService {
 
         if (verified) {
             user.setIdentityVerified(true);
+            
+            // Recalculate profile completion to update from 90% to 100%
+            if (user.getPrimaryRoleCode() == RoleName.STUDENT) {
+                StudentProfile profile = studentProfileRepository.findByUser(user)
+                        .orElseThrow(() -> new NotFoundException("Student profile not found"));
+                profileCompletionService.refreshStudentCompletion(user, profile);
+            } else if (user.getPrimaryRoleCode() == RoleName.OWNER) {
+                OwnerProfile profile = ownerProfileRepository.findByUser(user)
+                        .orElseThrow(() -> new NotFoundException("Owner profile not found"));
+                profileCompletionService.refreshOwnerCompletion(user, profile);
+            }
+            
             userRepository.save(user);
         }
 

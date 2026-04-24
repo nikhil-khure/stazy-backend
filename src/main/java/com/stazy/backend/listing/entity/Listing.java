@@ -35,6 +35,10 @@ public class Listing extends BaseEntity {
     private User ownerUser;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assigned_admin_id")
+    private User assignedAdmin;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "city_id")
     private City city;
 

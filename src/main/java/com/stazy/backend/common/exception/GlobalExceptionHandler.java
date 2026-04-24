@@ -49,6 +49,16 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(ex.getMessage(), null));
     }
 
+    @ExceptionHandler(AccountBlockedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccountBlocked(AccountBlockedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(AccessRevokedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccessRevoked(AccessRevokedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error(ex.getMessage(), null));
+    }
+
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error(ex.getMessage(), null));

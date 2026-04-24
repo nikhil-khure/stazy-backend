@@ -1,5 +1,6 @@
 package com.stazy.backend.user.dto;
 
+import com.stazy.backend.common.enums.AccountStatus;
 import com.stazy.backend.common.enums.RoleName;
 
 public record CurrentUserResponse(
@@ -8,6 +9,7 @@ public record CurrentUserResponse(
         String email,
         String mobileNumber,
         RoleName role,
+        AccountStatus accountStatus,
         boolean profileComplete,
         int completionPercentage,
         boolean identityVerified,

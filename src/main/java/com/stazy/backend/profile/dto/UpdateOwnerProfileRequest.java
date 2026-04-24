@@ -9,10 +9,8 @@ public record UpdateOwnerProfileRequest(
         String mobileNumber,
         String panNumber,
         String pgName,
-        String businessName,
-        String addressLineOne,
-        String addressLineTwo,
-        String locality,
+        Long cityId,
+        String pgAddress,
         String pincode,
         String profilePhotoUrl,
         String profilePhotoPublicId

@@ -5,10 +5,12 @@ import com.stazy.backend.admin.dto.AdminHiringRequestResponse;
 import com.stazy.backend.admin.dto.AdminQueryCreateRequest;
 import com.stazy.backend.admin.dto.AdminQueryReplyRequest;
 import com.stazy.backend.admin.dto.AdminQueryResponse;
+import com.stazy.backend.admin.dto.CityOptionResponse;
 import com.stazy.backend.admin.dto.ContactMessageRequest;
 import com.stazy.backend.admin.dto.FeedbackResponse;
 import com.stazy.backend.admin.dto.FeedbackSubmissionRequest;
 import com.stazy.backend.admin.dto.HireAdminRequest;
+import com.stazy.backend.admin.dto.PublicContactDetailsResponse;
 import com.stazy.backend.admin.dto.PublicFeedbackRequest;
 import com.stazy.backend.admin.entity.AdminHiringRequest;
 import com.stazy.backend.admin.entity.AdminQuery;
@@ -26,10 +28,13 @@ import com.stazy.backend.common.enums.HiringRequestStatus;
 import com.stazy.backend.common.enums.RoleName;
 import com.stazy.backend.common.exception.BadRequestException;
 import com.stazy.backend.common.exception.NotFoundException;
+import com.stazy.backend.common.service.EmailService;
 import com.stazy.backend.common.util.PasswordRules;
 import com.stazy.backend.integration.cloudinary.CloudinaryService;
 import com.stazy.backend.integration.cloudinary.DownloadedAsset;
 import com.stazy.backend.integration.cloudinary.UploadedAsset;
+import com.stazy.backend.listing.entity.Listing;
+import com.stazy.backend.listing.repository.ListingRepository;
 import com.stazy.backend.profile.entity.AdminProfile;
 import com.stazy.backend.profile.entity.City;
 import com.stazy.backend.profile.repository.AdminProfileRepository;
@@ -40,6 +45,8 @@ import com.stazy.backend.user.entity.UserRole;
 import com.stazy.backend.user.repository.RoleRepository;
 import com.stazy.backend.user.repository.UserRepository;
 import com.stazy.backend.user.service.CurrentUserService;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -58,9 +65,11 @@ public class AdminOperationsService {
     private final CloudinaryService cloudinaryService;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final ListingRepository listingRepository;
     private final AdminProfileRepository adminProfileRepository;
     private final CityRepository cityRepository;
     private final PasswordEncoder passwordEncoder;
+    private final EmailService emailService;
 
     public AdminOperationsService(
             ContactMessageRepository contactMessageRepository,
@@ -71,9 +80,11 @@ public class AdminOperationsService {
             CloudinaryService cloudinaryService,
             UserRepository userRepository,
             RoleRepository roleRepository,
+            ListingRepository listingRepository,
             AdminProfileRepository adminProfileRepository,
             CityRepository cityRepository,
-            PasswordEncoder passwordEncoder
+            PasswordEncoder passwordEncoder,
+            EmailService emailService
     ) {
         this.contactMessageRepository = contactMessageRepository;
         this.feedbackRepository = feedbackRepository;
@@ -83,9 +94,11 @@ public class AdminOperationsService {
         this.cloudinaryService = cloudinaryService;
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
+        this.listingRepository = listingRepository;
         this.adminProfileRepository = adminProfileRepository;
         this.cityRepository = cityRepository;
         this.passwordEncoder = passwordEncoder;
+        this.emailService = emailService;
     }
 
     @Transactional
@@ -114,33 +127,93 @@ public class AdminOperationsService {
     public FeedbackResponse submitAuthenticatedFeedback(UUID userId, FeedbackSubmissionRequest request) {
         User user = currentUserService.requireUser(userId);
         User targetUser = null;
+        Listing listing = null;
         if (request.targetUserCode() != null && !request.targetUserCode().isBlank()) {
             targetUser = userRepository.findByUserCodeIgnoreCase(request.targetUserCode().trim())
                     .orElseThrow(() -> new NotFoundException("Target user not found."));
         }
+        if (request.feedbackScope() == FeedbackScope.LISTING) {
+            if (request.location() == null || request.location().isBlank()) {
+                throw new BadRequestException("Listing feedback must include the related listing.");
+            }
+            UUID listingId = parseListingId(request.location());
+            listing = listingRepository.findById(listingId)
+                    .orElseThrow(() -> new NotFoundException("Listing not found."));
+            if (targetUser != null && !listing.getOwnerUser().getId().equals(targetUser.getId())) {
+                throw new BadRequestException("The selected listing does not belong to the target owner.");
+            }
+            targetUser = listing.getOwnerUser();
+        }
         Feedback feedback = new Feedback();
         feedback.setUser(user);
         feedback.setTargetUser(targetUser);
+        feedback.setListing(listing);
         feedback.setFeedbackScope(request.feedbackScope());
         feedback.setRating(request.rating());
         feedback.setMessage(request.message().trim());
         feedback.setDisplayNameSnapshot(user.getDisplayName());
         feedback.setEmailSnapshot(user.getEmail());
-        feedback.setLocationSnapshot(request.location());
+        feedback.setLocationSnapshot(listing == null ? (request.location() == null ? null : request.location().trim()) : listing.getId().toString());
         feedback.setAuthenticated(true);
-        feedback.setPublished(false);
-        feedback.setVisibilityStatus(FeedbackVisibilityStatus.PENDING_REVIEW);
-        return map(feedbackRepository.save(feedback));
+        boolean requiresModeration = request.feedbackScope() == FeedbackScope.PLATFORM;
+        feedback.setPublished(!requiresModeration);
+        feedback.setVisibilityStatus(requiresModeration ? FeedbackVisibilityStatus.PENDING_REVIEW : FeedbackVisibilityStatus.PUBLISHED);
+        Feedback savedFeedback = feedbackRepository.save(feedback);
+        if (savedFeedback.getFeedbackScope() == FeedbackScope.LISTING && savedFeedback.isPublished() && savedFeedback.getListing() != null) {
+            refreshListingRating(savedFeedback.getListing().getId());
+        }
+        return map(savedFeedback);
     }
 
     @Transactional(readOnly = true)
     public List<FeedbackResponse> getPublishedFeedback() {
-        return feedbackRepository.findByIsPublishedTrueOrderByCreatedAtDesc().stream().map(this::map).toList();
+        return feedbackRepository.findByIsPublishedTrueAndFeedbackScopeOrderByCreatedAtDesc(FeedbackScope.PLATFORM).stream()
+                .map(this::map)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<FeedbackResponse> getPublishedListingFeedback(UUID listingId) {
+        Listing listing = listingRepository.findById(listingId)
+                .orElseThrow(() -> new NotFoundException("Listing not found."));
+        return feedbackRepository.findByListingAndIsPublishedTrueOrderByCreatedAtDesc(listing).stream()
+                .map(this::map)
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public List<FeedbackResponse> getFeedbackByAuth(boolean authenticated) {
-        return feedbackRepository.findByIsAuthenticatedOrderByCreatedAtDesc(authenticated).stream().map(this::map).toList();
+        if (!authenticated) {
+            return feedbackRepository.findByIsAuthenticatedOrderByCreatedAtDesc(false).stream().map(this::map).toList();
+        }
+        return feedbackRepository.findByIsAuthenticatedAndFeedbackScopeOrderByCreatedAtDesc(true, FeedbackScope.PLATFORM).stream()
+                .map(this::map)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<CityOptionResponse> getAvailableCities() {
+        return cityRepository.findAll().stream()
+                .map(city -> new CityOptionResponse(city.getId(), city.getName(), city.getState(), city.getCountry()))
+                .sorted((left, right) -> left.cityName().compareToIgnoreCase(right.cityName()))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public PublicContactDetailsResponse getSuperAdminContactDetails() {
+        User superAdmin = userRepository.findByPrimaryRoleCodeOrderByCreatedAtDesc(RoleName.SUPER_ADMIN).stream()
+                .findFirst()
+                .orElse(null);
+        if (superAdmin == null) {
+            return new PublicContactDetailsResponse("Stazy Support", "support@stazy.in", null, null);
+        }
+        AdminProfile profile = adminProfileRepository.findByUser(superAdmin).orElse(null);
+        return new PublicContactDetailsResponse(
+                superAdmin.getDisplayName(),
+                superAdmin.getEmail(),
+                superAdmin.getMobileNumber(),
+                profile != null && profile.getCity() != null ? profile.getCity().getName() : null
+        );
     }
 
     @Transactional
@@ -148,15 +221,37 @@ public class AdminOperationsService {
         requireSuperAdmin(reviewerId);
         Feedback feedback = feedbackRepository.findById(feedbackId)
                 .orElseThrow(() -> new NotFoundException("Feedback not found."));
+        if (feedback.getFeedbackScope() != FeedbackScope.PLATFORM) {
+            throw new BadRequestException("Only platform feedback can be published from the super admin dashboard.");
+        }
         feedback.setPublished(true);
         feedback.setVisibilityStatus(FeedbackVisibilityStatus.PUBLISHED);
         return map(feedbackRepository.save(feedback));
     }
 
     @Transactional
+    public FeedbackResponse unpublishFeedback(UUID reviewerId, UUID feedbackId) {
+        requireSuperAdmin(reviewerId);
+        Feedback feedback = feedbackRepository.findById(feedbackId)
+                .orElseThrow(() -> new NotFoundException("Feedback not found."));
+        if (feedback.getFeedbackScope() != FeedbackScope.PLATFORM) {
+            throw new BadRequestException("Only platform feedback can be unpublished from the super admin dashboard.");
+        }
+        feedback.setPublished(false);
+        feedback.setVisibilityStatus(FeedbackVisibilityStatus.PENDING_REVIEW);
+        return map(feedbackRepository.save(feedback));
+    }
+
+    @Transactional
     public void deleteFeedback(UUID reviewerId, UUID feedbackId) {
         requireSuperAdmin(reviewerId);
-        feedbackRepository.deleteById(feedbackId);
+        Feedback feedback = feedbackRepository.findById(feedbackId)
+                .orElseThrow(() -> new NotFoundException("Feedback not found."));
+        Listing affectedListing = feedback.getListing();
+        feedbackRepository.delete(feedback);
+        if (affectedListing != null) {
+            refreshListingRating(affectedListing.getId());
+        }
     }
 
     @Transactional
@@ -236,6 +331,16 @@ public class AdminOperationsService {
         hiringRequest.setReviewedBy(currentUserService.requireUser(reviewerId));
         hiringRequest.setReviewedAt(OffsetDateTime.now());
         hiringRequest.setReviewNotes(request.reviewNotes());
+        
+        // Send email to the newly hired admin with credentials
+        emailService.sendAdminHiredEmail(
+            hiringRequest.getEmail(),
+            request.adminId().trim().toUpperCase(),
+            request.password(),
+            request.secretCode(),
+            city.getName()
+        );
+        
         return map(adminHiringRequestRepository.save(hiringRequest));
     }
 
@@ -247,6 +352,10 @@ public class AdminOperationsService {
         hiringRequest.setReviewedBy(currentUserService.requireUser(reviewerId));
         hiringRequest.setReviewedAt(OffsetDateTime.now());
         hiringRequest.setReviewNotes(reviewNotes);
+        
+        // Send rejection email to the applicant
+        emailService.sendAdminRejectionEmail(hiringRequest.getEmail(), hiringRequest.getFullName());
+        
         return map(adminHiringRequestRepository.save(hiringRequest));
     }
 
@@ -311,11 +420,40 @@ public class AdminOperationsService {
                 feedback.getDisplayNameSnapshot(),
                 feedback.getEmailSnapshot(),
                 feedback.getLocationSnapshot(),
+                feedback.getTargetUser() == null ? null : feedback.getTargetUser().getUserCode(),
+                feedback.getUser() == null ? null : feedback.getUser().getProfilePhotoUrl(),
                 feedback.isAuthenticated(),
                 feedback.isPublished(),
                 feedback.getVisibilityStatus(),
-                feedback.getCreatedAt()
+                feedback.getCreatedAt(),
+                feedback.getUser() == null ? null : feedback.getUser().getPrimaryRoleCode()
         );
+    }
+
+    private UUID parseListingId(String locationValue) {
+        try {
+            return UUID.fromString(locationValue.trim());
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException("Listing feedback is linked to an invalid listing.");
+        }
+    }
+
+    private void refreshListingRating(UUID listingId) {
+        Listing listing = listingRepository.findById(listingId)
+                .orElseThrow(() -> new NotFoundException("Listing not found."));
+        List<Feedback> feedbackItems = feedbackRepository.findByListingAndIsPublishedTrueOrderByCreatedAtDesc(listing);
+        int ratingCount = feedbackItems.size();
+        BigDecimal ratingAverage = ratingCount == 0
+                ? BigDecimal.ZERO
+                : BigDecimal.valueOf(feedbackItems.stream()
+                .map(Feedback::getRating)
+                .filter(rating -> rating != null)
+                .mapToInt(Integer::intValue)
+                .average()
+                .orElse(0D)).setScale(1, RoundingMode.HALF_UP);
+        listing.setRatingCount(ratingCount);
+        listing.setRatingAverage(ratingAverage);
+        listingRepository.save(listing);
     }
 
     private AdminHiringRequestResponse map(AdminHiringRequest request) {

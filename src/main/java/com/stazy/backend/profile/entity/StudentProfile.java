@@ -1,8 +1,11 @@
 package com.stazy.backend.profile.entity;
 
 import com.stazy.backend.common.entity.BaseEntity;
+import com.stazy.backend.common.enums.Gender;
 import com.stazy.backend.user.entity.User;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -34,4 +37,7 @@ public class StudentProfile extends BaseEntity {
     private City city;
 
     private String bio;
+
+    @Enumerated(EnumType.STRING)
+    private Gender gender;
 }

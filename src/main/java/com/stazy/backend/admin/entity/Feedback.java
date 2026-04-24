@@ -3,6 +3,7 @@ package com.stazy.backend.admin.entity;
 import com.stazy.backend.common.entity.BaseEntity;
 import com.stazy.backend.common.enums.FeedbackScope;
 import com.stazy.backend.common.enums.FeedbackVisibilityStatus;
+import com.stazy.backend.listing.entity.Listing;
 import com.stazy.backend.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -28,6 +29,10 @@ public class Feedback extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "target_user_id")
     private User targetUser;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "listing_id")
+    private Listing listing;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

@@ -21,6 +21,7 @@ import com.stazy.backend.common.enums.OtpStatus;
 import com.stazy.backend.common.enums.RoleName;
 import com.stazy.backend.common.exception.BadRequestException;
 import com.stazy.backend.common.exception.UnauthorizedException;
+import com.stazy.backend.common.service.EmailService;
 import com.stazy.backend.common.util.PasswordRules;
 import com.stazy.backend.profile.entity.AdminProfile;
 import com.stazy.backend.profile.entity.OwnerProfile;
@@ -67,6 +68,7 @@ public class AuthService {
     private final UserCodeGenerator userCodeGenerator;
     private final ProfileCompletionService profileCompletionService;
     private final AppProperties appProperties;
+    private final EmailService emailService;
 
     public AuthService(
             UserRepository userRepository,
@@ -80,7 +82,8 @@ public class AuthService {
             JwtService jwtService,
             UserCodeGenerator userCodeGenerator,
             ProfileCompletionService profileCompletionService,
-            AppProperties appProperties
+            AppProperties appProperties,
+            EmailService emailService
     ) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
@@ -94,6 +97,7 @@ public class AuthService {
         this.userCodeGenerator = userCodeGenerator;
         this.profileCompletionService = profileCompletionService;
         this.appProperties = appProperties;
+        this.emailService = emailService;
     }
 
     @Transactional
@@ -124,10 +128,21 @@ public class AuthService {
     @Transactional
     public TokenResponse login(LoginRequest request) {
         User user = findUserByLoginId(request.loginId());
+        
+        // Check if user is deleted
+        if (user.getAccountStatus() == com.stazy.backend.common.enums.AccountStatus.DELETED) {
+            throw new UnauthorizedException("Invalid credentials.");
+        }
+        
         if (!Objects.equals(user.getPrimaryRoleCode(), request.role())) {
             throw new UnauthorizedException("This account is not allowed to log in as " + request.role().name() + ".");
         }
+        
         verifyPassword(request.password(), user.getPasswordHash());
+        
+        // Allow blocked users to login - they will see the block message in the dashboard
+        // The AccountStatusFilter will handle blocking their API requests
+        
         user.setLastLoginAt(OffsetDateTime.now());
         return issueTokens(userRepository.save(user));
     }
@@ -165,8 +180,14 @@ public class AuthService {
         challenge.setStatus(OtpStatus.PENDING);
         otpChallengeRepository.save(challenge);
 
-        log.info("Generated {} OTP for {}: {}", roleName, user.getEmail(), otp);
-        return new OtpDispatchResponse(maskEmail(user.getEmail()), appProperties.getOtp().isRevealInResponse() ? otp : null);
+        // Send OTP via email for Super Admin and Admin
+        String roleDisplayName = roleName == RoleName.SUPER_ADMIN ? "Super Admin" : "Admin";
+        emailService.sendOtpEmail(user.getEmail(), otp, roleDisplayName);
+        
+        log.info("Generated {} OTP for {} and sent via email", roleName, user.getEmail());
+        
+        // Never reveal OTP in response for Super Admin and Admin
+        return new OtpDispatchResponse(maskEmail(user.getEmail()), null);
     }
 
     @Transactional
@@ -191,10 +212,24 @@ public class AuthService {
     @Transactional
     public TokenResponse loginPrivileged(PrivilegedOtpRequest request, RoleName roleName) {
         User user = findPrivilegedUser(request.loginId(), roleName);
+        
+        // Check if user is deleted
+        if (user.getAccountStatus() == com.stazy.backend.common.enums.AccountStatus.DELETED) {
+            throw new UnauthorizedException("Invalid credentials.");
+        }
+        
         verifyPassword(request.password(), user.getPasswordHash());
         AdminProfile adminProfile = adminProfileRepository.findByUser(user)
                 .orElseThrow(() -> new UnauthorizedException("Admin profile not found."));
         verifyPassword(request.secretCode(), adminProfile.getSecretCodeHash());
+
+        // Check if admin access is revoked
+        if (roleName == RoleName.ADMIN && adminProfile.getEmployeeStatus() == com.stazy.backend.common.enums.EmployeeStatus.REVOKED) {
+            String revokeReason = adminProfile.getRevokeReason() == null || adminProfile.getRevokeReason().isBlank()
+                    ? "Your access has been revoked by Super Admin"
+                    : adminProfile.getRevokeReason();
+            throw new com.stazy.backend.common.exception.AccessRevokedException(revokeReason);
+        }
 
         OtpChallenge challenge = getLatestChallenge(user, roleName);
         if (challenge.getStatus() != OtpStatus.VERIFIED) {
@@ -266,6 +301,10 @@ public class AuthService {
         }
     }
 
+    public TokenResponse issueTokensForUser(User user) {
+        return issueTokens(user);
+    }
+
     private TokenResponse issueTokens(User user) {
         StazyPrincipal principal = new StazyPrincipal(user);
         String accessToken = jwtService.generateAccessToken(principal);
@@ -291,7 +330,9 @@ public class AuthService {
                 user.getEmail(),
                 user.isProfileComplete(),
                 user.getCompletionPercentage() == null ? 0 : user.getCompletionPercentage(),
-                user.isIdentityVerified()
+                user.isIdentityVerified(),
+                user.getAccountStatus(),
+                user.getBlockReason()
         );
     }
 

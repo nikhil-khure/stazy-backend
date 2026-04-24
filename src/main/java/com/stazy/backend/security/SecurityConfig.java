@@ -27,15 +27,18 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final AccountStatusFilter accountStatusFilter;
     private final StazyUserDetailsService userDetailsService;
     private final AppProperties appProperties;
 
     public SecurityConfig(
             JwtAuthenticationFilter jwtAuthenticationFilter,
+            AccountStatusFilter accountStatusFilter,
             StazyUserDetailsService userDetailsService,
             AppProperties appProperties
     ) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.accountStatusFilter = accountStatusFilter;
         this.userDetailsService = userDetailsService;
         this.appProperties = appProperties;
     }
@@ -59,7 +62,8 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(accountStatusFilter, JwtAuthenticationFilter.class);
         return http.build();
     }
 

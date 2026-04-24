@@ -1,5 +1,6 @@
 package com.stazy.backend.security;
 
+import com.stazy.backend.common.enums.AccountStatus;
 import com.stazy.backend.user.entity.User;
 import java.util.Collection;
 import java.util.UUID;
@@ -15,6 +16,7 @@ public class StazyPrincipal implements UserDetails {
     private final String userCode;
     private final String password;
     private final String username;
+    private final AccountStatus accountStatus;
     private final Collection<? extends GrantedAuthority> authorities;
 
     public StazyPrincipal(User user) {
@@ -22,8 +24,16 @@ public class StazyPrincipal implements UserDetails {
         this.userCode = user.getUserCode();
         this.password = user.getPasswordHash();
         this.username = user.getEmail();
+        this.accountStatus = user.getAccountStatus();
         this.authorities = user.getUserRoles().stream()
                 .map(userRole -> new SimpleGrantedAuthority("ROLE_" + userRole.getRole().getCode().name()))
                 .toList();
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return accountStatus != AccountStatus.BLOCKED
+                && accountStatus != AccountStatus.SUSPENDED
+                && accountStatus != AccountStatus.DELETED;
     }
 }

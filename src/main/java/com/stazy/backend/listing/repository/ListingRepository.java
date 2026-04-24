@@ -18,4 +18,6 @@ public interface ListingRepository extends JpaRepository<Listing, UUID>, JpaSpec
     Optional<Listing> findByIdAndOwnerUser(UUID id, User ownerUser);
 
     long countByStatus(ListingStatus status);
+
+    void deleteByOwnerUser(User ownerUser);
 }

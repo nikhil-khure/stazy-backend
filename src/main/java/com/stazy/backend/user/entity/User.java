@@ -77,6 +77,12 @@ public class User extends BaseEntity {
     @Column(name = "deleted_at")
     private OffsetDateTime deletedAt;
 
+    @Column(name = "block_reason")
+    private String blockReason;
+
+    @Column(name = "blocked_at")
+    private OffsetDateTime blockedAt;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<UserRole> userRoles = new LinkedHashSet<>();
 }

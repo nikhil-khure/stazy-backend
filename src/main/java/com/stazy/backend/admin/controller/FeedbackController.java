@@ -50,6 +50,14 @@ public class FeedbackController {
         return ApiResponse.ok("Feedback published successfully.", adminOperationsService.publishFeedback(principal.getUserId(), feedbackId));
     }
 
+    @PatchMapping("/{feedbackId}/unpublish")
+    public ApiResponse<FeedbackResponse> unpublishFeedback(
+            @AuthenticationPrincipal StazyPrincipal principal,
+            @PathVariable UUID feedbackId
+    ) {
+        return ApiResponse.ok("Feedback unpublished successfully.", adminOperationsService.unpublishFeedback(principal.getUserId(), feedbackId));
+    }
+
     @DeleteMapping("/{feedbackId}")
     public ApiResponse<Void> deleteFeedback(
             @AuthenticationPrincipal StazyPrincipal principal,

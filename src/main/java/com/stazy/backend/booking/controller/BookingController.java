@@ -16,12 +16,14 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -93,6 +95,14 @@ public class BookingController {
         return ApiResponse.ok("Payments loaded successfully.", bookingService.payments(principal.getUserId()));
     }
 
+    @GetMapping("/listings/{listingId}/booking-status")
+    public ApiResponse<Boolean> checkBookingStatus(
+            @AuthenticationPrincipal StazyPrincipal principal,
+            @PathVariable UUID listingId
+    ) {
+        return ApiResponse.ok("Booking status checked.", bookingService.hasActiveBookingForListing(principal.getUserId(), listingId));
+    }
+
     @PatchMapping("/payments/{paymentId}")
     public ApiResponse<RentPaymentResponse> updatePayment(
             @AuthenticationPrincipal StazyPrincipal principal,
@@ -123,5 +133,14 @@ public class BookingController {
             @RequestBody CancelRequestReviewRequest request
     ) {
         return ApiResponse.ok("Cancel request reviewed successfully.", bookingService.reviewCancelRequest(principal.getUserId(), cancelRequestId, request));
+    }
+
+    @DeleteMapping("/active/{activeStayId}")
+    public ApiResponse<Void> deleteActiveStay(
+            @AuthenticationPrincipal StazyPrincipal principal,
+            @PathVariable UUID activeStayId
+    ) {
+        bookingService.deleteActiveStay(principal.getUserId(), activeStayId);
+        return ApiResponse.ok("Student connection deleted successfully.", null);
     }
 }

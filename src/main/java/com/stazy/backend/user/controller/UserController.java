@@ -38,6 +38,7 @@ public class UserController {
                 user.getEmail(),
                 user.getMobileNumber(),
                 user.getPrimaryRoleCode(),
+                user.getAccountStatus(),
                 user.isProfileComplete(),
                 user.getCompletionPercentage() == null ? 0 : user.getCompletionPercentage(),
                 user.isIdentityVerified(),
@@ -52,6 +53,15 @@ public class UserController {
     ) {
         userAccountService.updatePassword(principal.getUserId(), request);
         return ApiResponse.ok("Password updated successfully.");
+    }
+
+    @PatchMapping("/me/verify-password")
+    public ApiResponse<Void> verifyPassword(
+            @AuthenticationPrincipal StazyPrincipal principal,
+            @Valid @RequestBody DeleteAccountRequest request
+    ) {
+        userAccountService.verifyPassword(principal.getUserId(), request.currentPassword());
+        return ApiResponse.ok("Password verified successfully.");
     }
 
     @DeleteMapping("/me")

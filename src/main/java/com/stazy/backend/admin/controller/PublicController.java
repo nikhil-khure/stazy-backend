@@ -1,13 +1,17 @@
 package com.stazy.backend.admin.controller;
 
 import com.stazy.backend.admin.dto.ContactMessageRequest;
+import com.stazy.backend.admin.dto.CityOptionResponse;
 import com.stazy.backend.admin.dto.FeedbackResponse;
+import com.stazy.backend.admin.dto.PublicContactDetailsResponse;
 import com.stazy.backend.admin.dto.PublicFeedbackRequest;
 import com.stazy.backend.admin.service.AdminOperationsService;
 import com.stazy.backend.common.api.ApiResponse;
 import jakarta.validation.Valid;
 import java.util.List;
+import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -38,5 +42,20 @@ public class PublicController {
     @GetMapping("/testimonials")
     public ApiResponse<List<FeedbackResponse>> testimonials() {
         return ApiResponse.ok("Published testimonials loaded successfully.", adminOperationsService.getPublishedFeedback());
+    }
+
+    @GetMapping("/cities")
+    public ApiResponse<List<CityOptionResponse>> cities() {
+        return ApiResponse.ok("Cities loaded successfully.", adminOperationsService.getAvailableCities());
+    }
+
+    @GetMapping("/contact-details")
+    public ApiResponse<PublicContactDetailsResponse> contactDetails() {
+        return ApiResponse.ok("Contact details loaded successfully.", adminOperationsService.getSuperAdminContactDetails());
+    }
+
+    @GetMapping("/listings/{listingId}/reviews")
+    public ApiResponse<List<FeedbackResponse>> listingReviews(@PathVariable UUID listingId) {
+        return ApiResponse.ok("Listing reviews loaded successfully.", adminOperationsService.getPublishedListingFeedback(listingId));
     }
 }

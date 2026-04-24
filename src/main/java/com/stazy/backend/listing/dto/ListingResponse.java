@@ -21,6 +21,7 @@ public record ListingResponse(
         int totalCapacity,
         int availableCapacity,
         ListingStatus status,
+        String rejectionReason,
         VerificationStatus latestFakeDetectionStatus,
         boolean verified,
         List<String> amenities,

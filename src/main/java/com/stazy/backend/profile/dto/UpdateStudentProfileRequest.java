@@ -1,5 +1,6 @@
 package com.stazy.backend.profile.dto;
 
+import com.stazy.backend.common.enums.Gender;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
@@ -11,7 +12,9 @@ public record UpdateStudentProfileRequest(
         String prn,
         String enrollmentNumber,
         String currentLocation,
+        Long cityId,
         String profilePhotoUrl,
-        String profilePhotoPublicId
+        String profilePhotoPublicId,
+        Gender gender
 ) {
 }

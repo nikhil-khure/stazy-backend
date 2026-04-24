@@ -6,8 +6,10 @@ import com.stazy.backend.profile.dto.OwnerProfileResponse;
 import com.stazy.backend.profile.dto.StudentProfileResponse;
 import com.stazy.backend.profile.dto.UpdateOwnerProfileRequest;
 import com.stazy.backend.profile.dto.UpdateStudentProfileRequest;
+import com.stazy.backend.profile.entity.City;
 import com.stazy.backend.profile.entity.OwnerProfile;
 import com.stazy.backend.profile.entity.StudentProfile;
+import com.stazy.backend.profile.repository.CityRepository;
 import com.stazy.backend.profile.repository.OwnerProfileRepository;
 import com.stazy.backend.profile.repository.StudentProfileRepository;
 import com.stazy.backend.user.entity.User;
@@ -24,6 +26,7 @@ public class ProfileService {
     private final UserRepository userRepository;
     private final StudentProfileRepository studentProfileRepository;
     private final OwnerProfileRepository ownerProfileRepository;
+    private final CityRepository cityRepository;
     private final ProfileCompletionService profileCompletionService;
 
     public ProfileService(
@@ -31,12 +34,14 @@ public class ProfileService {
             UserRepository userRepository,
             StudentProfileRepository studentProfileRepository,
             OwnerProfileRepository ownerProfileRepository,
+            CityRepository cityRepository,
             ProfileCompletionService profileCompletionService
     ) {
         this.currentUserService = currentUserService;
         this.userRepository = userRepository;
         this.studentProfileRepository = studentProfileRepository;
         this.ownerProfileRepository = ownerProfileRepository;
+        this.cityRepository = cityRepository;
         this.profileCompletionService = profileCompletionService;
     }
 
@@ -73,6 +78,8 @@ public class ProfileService {
         profile.setPrn(blankToNull(request.prn()));
         profile.setEnrollmentNumber(blankToNull(request.enrollmentNumber()));
         profile.setCurrentLocation(blankToNull(request.currentLocation()));
+        profile.setCity(resolveCity(request.cityId()));
+        profile.setGender(request.gender());
 
         profileCompletionService.refreshStudentCompletion(user, profile);
         userRepository.save(user);
@@ -111,10 +118,11 @@ public class ProfileService {
 
         profile.setPanNumber(blankToNull(request.panNumber()));
         profile.setPgName(blankToNull(request.pgName()));
-        profile.setBusinessName(blankToNull(request.businessName()));
-        profile.setAddressLineOne(blankToNull(request.addressLineOne()));
-        profile.setAddressLineTwo(blankToNull(request.addressLineTwo()));
-        profile.setLocality(blankToNull(request.locality()));
+        profile.setCity(resolveCity(request.cityId()));
+        profile.setAddressLineOne(blankToNull(request.pgAddress()));
+        profile.setAddressLineTwo(null);
+        profile.setLocality(profile.getCity() == null ? null : profile.getCity().getName());
+        profile.setBusinessName(null);
         profile.setPincode(blankToNull(request.pincode()));
 
         profileCompletionService.refreshOwnerCompletion(user, profile);
@@ -149,10 +157,13 @@ public class ProfileService {
                 profile.getPrn(),
                 profile.getEnrollmentNumber(),
                 profile.getCurrentLocation(),
+                profile.getCity() == null ? null : profile.getCity().getId(),
+                profile.getCity() == null ? null : profile.getCity().getName(),
                 user.getProfilePhotoUrl(),
                 user.getCompletionPercentage() == null ? 0 : user.getCompletionPercentage(),
                 user.isProfileComplete(),
-                user.isIdentityVerified()
+                user.isIdentityVerified(),
+                profile.getGender()
         );
     }
 
@@ -164,9 +175,9 @@ public class ProfileService {
                 user.getMobileNumber(),
                 profile.getPanNumber(),
                 profile.getPgName(),
-                profile.getBusinessName(),
+                profile.getCity() == null ? null : profile.getCity().getId(),
+                profile.getCity() == null ? null : profile.getCity().getName(),
                 profile.getAddressLineOne(),
-                profile.getAddressLineTwo(),
                 profile.getLocality(),
                 profile.getPincode(),
                 user.getProfilePhotoUrl(),
@@ -174,6 +185,14 @@ public class ProfileService {
                 user.isProfileComplete(),
                 user.isIdentityVerified()
         );
+    }
+
+    private City resolveCity(Long cityId) {
+        if (cityId == null) {
+            return null;
+        }
+        return cityRepository.findById(cityId)
+                .orElseThrow(() -> new BadRequestException("Selected city was not found."));
     }
 
     private String blankToNull(String value) {

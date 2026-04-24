@@ -41,4 +41,10 @@ public class ListingUpsertRequest {
     private MultipartFile ownerPhoto;
 
     private MultipartFile ownerLiveVideo;
+
+    private String existingRoomImageUrlsJson;
+
+    private String existingOwnerVideoUrl;
+    
+    private String selectedAdminId;
 }

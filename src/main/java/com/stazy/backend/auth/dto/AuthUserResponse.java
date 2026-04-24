@@ -1,5 +1,6 @@
 package com.stazy.backend.auth.dto;
 
+import com.stazy.backend.common.enums.AccountStatus;
 import com.stazy.backend.common.enums.RoleName;
 import java.util.UUID;
 
@@ -11,6 +12,8 @@ public record AuthUserResponse(
         String email,
         boolean profileComplete,
         int completionPercentage,
-        boolean identityVerified
+        boolean identityVerified,
+        AccountStatus accountStatus,
+        String blockReason
 ) {
 }

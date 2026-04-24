@@ -1,6 +1,7 @@
 package com.stazy.backend.auth.controller;
 
 import com.stazy.backend.auth.dto.LoginRequest;
+import com.stazy.backend.auth.dto.OAuthLoginRequest;
 import com.stazy.backend.auth.dto.OtpDispatchResponse;
 import com.stazy.backend.auth.dto.OtpVerifyRequest;
 import com.stazy.backend.auth.dto.OwnerSignupRequest;
@@ -9,6 +10,7 @@ import com.stazy.backend.auth.dto.RefreshTokenRequest;
 import com.stazy.backend.auth.dto.StudentSignupRequest;
 import com.stazy.backend.auth.dto.TokenResponse;
 import com.stazy.backend.auth.service.AuthService;
+import com.stazy.backend.auth.service.OAuthService;
 import com.stazy.backend.common.api.ApiResponse;
 import com.stazy.backend.common.enums.RoleName;
 import jakarta.validation.Valid;
@@ -22,9 +24,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final OAuthService oAuthService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, OAuthService oAuthService) {
         this.authService = authService;
+        this.oAuthService = oAuthService;
     }
 
     @PostMapping("/signup/student")
@@ -40,6 +44,11 @@ public class AuthController {
     @PostMapping("/login")
     public ApiResponse<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
         return ApiResponse.ok("Login successful.", authService.login(request));
+    }
+
+    @PostMapping("/oauth")
+    public ApiResponse<TokenResponse> oauth(@Valid @RequestBody OAuthLoginRequest request) {
+        return ApiResponse.ok("OAuth authentication successful.", oAuthService.authenticate(request));
     }
 
     @PostMapping("/refresh")

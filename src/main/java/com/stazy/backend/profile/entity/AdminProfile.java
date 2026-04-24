@@ -40,4 +40,10 @@ public class AdminProfile extends BaseEntity {
     private boolean canManageAllCities;
 
     private OffsetDateTime lastOtpVerifiedAt;
+
+    @Column(name = "revoked_at")
+    private OffsetDateTime revokedAt;
+
+    @Column(name = "revoke_reason")
+    private String revokeReason;
 }

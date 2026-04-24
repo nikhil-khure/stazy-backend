@@ -2,6 +2,7 @@ package com.stazy.backend.complaint.service;
 
 import com.stazy.backend.booking.entity.ActiveStay;
 import com.stazy.backend.booking.repository.ActiveStayRepository;
+import com.stazy.backend.common.events.RealtimeEventPublisher;
 import com.stazy.backend.common.enums.ComplaintMessageType;
 import com.stazy.backend.common.enums.ComplaintStatus;
 import com.stazy.backend.common.enums.RoleName;
@@ -43,6 +44,7 @@ public class ComplaintService {
     private final ListingRepository listingRepository;
     private final ActiveStayRepository activeStayRepository;
     private final CloudinaryService cloudinaryService;
+    private final RealtimeEventPublisher realtimeEventPublisher;
 
     public ComplaintService(
             ComplaintRepository complaintRepository,
@@ -52,7 +54,8 @@ public class ComplaintService {
             UserRepository userRepository,
             ListingRepository listingRepository,
             ActiveStayRepository activeStayRepository,
-            CloudinaryService cloudinaryService
+            CloudinaryService cloudinaryService,
+            RealtimeEventPublisher realtimeEventPublisher
     ) {
         this.complaintRepository = complaintRepository;
         this.complaintMessageRepository = complaintMessageRepository;
@@ -62,6 +65,7 @@ public class ComplaintService {
         this.listingRepository = listingRepository;
         this.activeStayRepository = activeStayRepository;
         this.cloudinaryService = cloudinaryService;
+        this.realtimeEventPublisher = realtimeEventPublisher;
     }
 
     @Transactional
@@ -94,7 +98,9 @@ public class ComplaintService {
 
         ComplaintMessage message = saveMessage(complaint, complainant, ComplaintMessageType.COMPLAINT, request.getDescription().trim());
         attachFiles(complaint, message, request.getAttachments());
-        return map(complaintRepository.findById(complaint.getId()).orElseThrow());
+        ComplaintResponse response = map(complaintRepository.findById(complaint.getId()).orElseThrow());
+        publishComplaintEvent("complaint_created", response, complainant, againstUser);
+        return response;
     }
 
     @Transactional(readOnly = true)
@@ -132,7 +138,9 @@ public class ComplaintService {
         complaint.setStatus(ComplaintStatus.RESOLVED);
         complaint.setCurrentResolutionSummary(request.getMessage().trim());
         complaint.setClosedAt(null);
-        return map(complaintRepository.save(complaint));
+        ComplaintResponse response = map(complaintRepository.save(complaint));
+        publishComplaintEvent("complaint_justification_submitted", response, complaint.getAgainstUser(), complaint.getComplainantUser());
+        return response;
     }
 
     @Transactional
@@ -145,10 +153,12 @@ public class ComplaintService {
         }
         ComplaintMessage message = saveMessage(complaint, actor, ComplaintMessageType.RE_COMPLAINT, request.getMessage().trim());
         attachFiles(complaint, message, request.getAttachments());
-        complaint.setStatus(ComplaintStatus.UNDER_PROGRESS);
+        complaint.setStatus(ComplaintStatus.UNDER_PROGRESS_RE_COMPLAINT);
         complaint.setCurrentResolutionSummary(request.getMessage().trim());
         complaint.setClosedAt(null);
-        return map(complaintRepository.save(complaint));
+        ComplaintResponse response = map(complaintRepository.save(complaint));
+        publishComplaintEvent("complaint_reopened", response, complaint.getAgainstUser(), complaint.getComplainantUser());
+        return response;
     }
 
     @Transactional
@@ -162,7 +172,20 @@ public class ComplaintService {
             complaint.setCurrentResolutionSummary("Complaint closed by complainant.");
         }
         saveMessage(complaint, actor, ComplaintMessageType.RESOLUTION, "Complaint closed by complainant.");
-        return map(complaintRepository.save(complaint));
+        ComplaintResponse response = map(complaintRepository.save(complaint));
+        publishComplaintEvent("complaint_closed", response, complaint.getAgainstUser(), complaint.getComplainantUser());
+        return response;
+    }
+
+    private void publishComplaintEvent(String eventType, ComplaintResponse payload, User firstUser, User secondUser) {
+        if (firstUser != null) {
+            realtimeEventPublisher.publishUserEvent(firstUser.getId().toString(), eventType, payload);
+        }
+        if (secondUser != null) {
+            realtimeEventPublisher.publishUserEvent(secondUser.getId().toString(), eventType, payload);
+        }
+        realtimeEventPublisher.publishRoleEvent("ADMIN", eventType, payload);
+        realtimeEventPublisher.publishRoleEvent("SUPER_ADMIN", eventType, payload);
     }
 
     private Listing resolveListing(UUID listingId) {
