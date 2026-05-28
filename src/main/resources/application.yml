@@ -31,21 +31,17 @@ spring:
     caffeine:
       spec: maximumSize=1000,expireAfterWrite=10m
   mail:
-    host: ${STAZY_MAIL_HOST:smtp.gmail.com}
-    port: ${STAZY_MAIL_PORT:465}
-    username: ${STAZY_MAIL_USERNAME:}
+    host: ${STAZY_MAIL_HOST:smtp.sendgrid.net}
+    port: ${STAZY_MAIL_PORT:587}
+    username: ${STAZY_MAIL_USERNAME:apikey}
     password: ${STAZY_MAIL_PASSWORD:}
     properties:
       mail:
         smtp:
           auth: ${STAZY_MAIL_AUTH:true}
-          ssl:
-            enable: ${STAZY_MAIL_SSL_ENABLE:true}
-            trust: ${STAZY_MAIL_SSL_TRUST:smtp.gmail.com}
-          socketFactory:
-            port: 465
-            class: javax.net.ssl.SSLSocketFactory
-            fallback: false
+          starttls:
+            enable: ${STAZY_MAIL_STARTTLS:true}
+            required: true
           connectiontimeout: 10000
           timeout: 10000
           writetimeout: 10000
