@@ -30,21 +30,13 @@ spring:
       - listing-detail
     caffeine:
       spec: maximumSize=1000,expireAfterWrite=10m
-  mail:
-    host: ${STAZY_MAIL_HOST:smtp.sendgrid.net}
-    port: ${STAZY_MAIL_PORT:587}
-    username: ${STAZY_MAIL_USERNAME:apikey}
-    password: ${STAZY_MAIL_PASSWORD:}
-    properties:
-      mail:
-        smtp:
-          auth: ${STAZY_MAIL_AUTH:true}
-          starttls:
-            enable: ${STAZY_MAIL_STARTTLS:true}
-            required: true
-          connectiontimeout: 10000
-          timeout: 10000
-          writetimeout: 10000
+# SendGrid HTTP API Configuration (SMTP blocked on Render)
+sendgrid:
+  api:
+    key: ${SENDGRID_API_KEY:}
+  from:
+    email: ${SENDGRID_FROM_EMAIL:}
+    name: ${SENDGRID_FROM_NAME:Stazy}
 
 server:
   port: ${STAZY_PORT:8080}

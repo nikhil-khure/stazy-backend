@@ -1,24 +1,30 @@
 package com.stazy.backend.common.service;
 
-import jakarta.mail.MessagingException;
-import jakarta.mail.internet.MimeMessage;
+import com.sendgrid.*;
+import com.sendgrid.helpers.mail.Mail;
+import com.sendgrid.helpers.mail.objects.Content;
+import com.sendgrid.helpers.mail.objects.Email;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+
+import java.io.IOException;
 
 @Service
 public class EmailService {
 
     private static final Logger log = LoggerFactory.getLogger(EmailService.class);
 
-    private final JavaMailSender mailSender;
+    @Value("${sendgrid.api.key}")
+    private String sendGridApiKey;
 
-    public EmailService(JavaMailSender mailSender) {
-        this.mailSender = mailSender;
-    }
+    @Value("${sendgrid.from.email:noreply@stazy.in}")
+    private String fromEmail;
+
+    @Value("${sendgrid.from.name:Stazy}")
+    private String fromName;
 
     @Async
     public void sendOtpEmail(String toEmail, String otp, String roleName) {
@@ -30,12 +36,11 @@ public class EmailService {
             log.info("[OTP-EMAIL] Completed async OTP email send to: {}", toEmail);
         } catch (Exception e) {
             log.error("[OTP-EMAIL] ❌ CRITICAL: Failed to send OTP email to: {}. Error: {}", toEmail, e.getMessage(), e);
-            // Re-throw to trigger AsyncUncaughtExceptionHandler
-            throw e;
+            throw new RuntimeException("Failed to send OTP email", e);
         }
     }
     
-    // Synchronous version for testing SMTP configuration
+    // Synchronous version for testing
     public void sendOtpEmailSync(String toEmail, String otp, String roleName) {
         log.info("[OTP-EMAIL-SYNC] Starting synchronous OTP email send to: {} for role: {}", toEmail, roleName);
         String subject = "Your " + roleName + " Login OTP - Stazy";
@@ -64,33 +69,46 @@ public class EmailService {
 
     private void sendHtmlEmail(String toEmail, String subject, String htmlBody) {
         long startTime = System.currentTimeMillis();
-        log.info("[EMAIL-SEND] Attempting to send email to: {} with subject: {}", toEmail, subject);
+        log.info("[EMAIL-SEND] Attempting to send email via SendGrid HTTP API to: {} with subject: {}", toEmail, subject);
         
         try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-            helper.setTo(toEmail);
-            helper.setSubject(subject);
-            helper.setText(htmlBody, true);
-            helper.setFrom("noreply@stazy.in");
+            Email from = new Email(fromEmail, fromName);
+            Email to = new Email(toEmail);
+            Content content = new Content("text/html", htmlBody);
+            Mail mail = new Mail(from, subject, to, content);
+
+            SendGrid sg = new SendGrid(sendGridApiKey);
+            Request request = new Request();
             
-            log.info("[EMAIL-SEND] Calling mailSender.send() for: {}", toEmail);
-            mailSender.send(message);
+            request.setMethod(Method.POST);
+            request.setEndpoint("mail/send");
+            request.setBody(mail.build());
+            
+            log.info("[EMAIL-SEND] Calling SendGrid API for: {}", toEmail);
+            Response response = sg.api(request);
             
             long duration = System.currentTimeMillis() - startTime;
-            log.info("[EMAIL-SEND] ✅ Email sent successfully to: {} in {}ms", toEmail, duration);
             
-        } catch (MessagingException e) {
+            if (response.getStatusCode() >= 200 && response.getStatusCode() < 300) {
+                log.info("[EMAIL-SEND] ✅ Email sent successfully via SendGrid to: {} in {}ms. Status: {}", 
+                         toEmail, duration, response.getStatusCode());
+            } else {
+                log.error("[EMAIL-SEND] ❌ SendGrid returned error status: {} for: {}. Body: {}", 
+                         response.getStatusCode(), toEmail, response.getBody());
+                throw new RuntimeException("SendGrid API error: " + response.getStatusCode() + " - " + response.getBody());
+            }
+            
+        } catch (IOException e) {
             long duration = System.currentTimeMillis() - startTime;
-            log.error("[EMAIL-SEND] ❌ MessagingException sending email to: {} after {}ms. Error: {}", 
+            log.error("[EMAIL-SEND] ❌ IOException sending email via SendGrid to: {} after {}ms. Error: {}", 
                      toEmail, duration, e.getMessage(), e);
-            throw new RuntimeException("Failed to send email: " + e.getMessage(), e);
+            throw new RuntimeException("Failed to send email via SendGrid: " + e.getMessage(), e);
             
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
-            log.error("[EMAIL-SEND] ❌ Unexpected error sending email to: {} after {}ms. Error: {}", 
+            log.error("[EMAIL-SEND] ❌ Unexpected error sending email via SendGrid to: {} after {}ms. Error: {}", 
                      toEmail, duration, e.getMessage(), e);
-            throw new RuntimeException("Failed to send email: " + e.getMessage(), e);
+            throw new RuntimeException("Failed to send email via SendGrid: " + e.getMessage(), e);
         }
     }
 
