@@ -41,6 +41,9 @@ spring:
           auth: ${STAZY_MAIL_AUTH:}
           starttls:
             enable: ${STAZY_MAIL_STARTTLS:}
+          connectiontimeout: 10000
+          timeout: 10000
+          writetimeout: 10000
 
 server:
   port: ${STAZY_PORT:8080}

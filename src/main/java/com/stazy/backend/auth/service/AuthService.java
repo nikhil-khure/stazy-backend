@@ -163,13 +163,22 @@ public class AuthService {
 
     @Transactional
     public OtpDispatchResponse sendPrivilegedOtp(PrivilegedOtpRequest request, RoleName roleName) {
+        log.info("[OTP-FLOW] Starting OTP generation for loginId: {} role: {}", request.loginId(), roleName);
+        
         User user = findPrivilegedUser(request.loginId(), roleName);
+        log.info("[OTP-FLOW] User found: {} email: {}", user.getUserCode(), user.getEmail());
+        
         verifyPassword(request.password(), user.getPasswordHash());
+        log.info("[OTP-FLOW] Password verified for user: {}", user.getUserCode());
+        
         AdminProfile adminProfile = adminProfileRepository.findByUser(user)
                 .orElseThrow(() -> new UnauthorizedException("Admin profile not found."));
         verifyPassword(request.secretCode(), adminProfile.getSecretCodeHash());
+        log.info("[OTP-FLOW] Secret code verified for user: {}", user.getUserCode());
 
         String otp = generateOtp();
+        log.info("[OTP-FLOW] Generated OTP for user: {}", user.getUserCode());
+        
         OtpChallenge challenge = new OtpChallenge();
         challenge.setUser(user);
         challenge.setEmail(user.getEmail());
@@ -178,13 +187,18 @@ public class AuthService {
         challenge.setHashedCode(passwordEncoder.encode(otp));
         challenge.setExpiresAt(OffsetDateTime.now().plusMinutes(appProperties.getOtp().getExpiryMinutes()));
         challenge.setStatus(OtpStatus.PENDING);
-        otpChallengeRepository.save(challenge);
+        
+        OtpChallenge savedChallenge = otpChallengeRepository.save(challenge);
+        log.info("[OTP-FLOW] OTP challenge saved to database with ID: {} for user: {}", 
+                savedChallenge.getId(), user.getUserCode());
 
-        // Send OTP via email for Super Admin and Admin
+        // Send OTP via email asynchronously (outside transaction)
         String roleDisplayName = roleName == RoleName.SUPER_ADMIN ? "Super Admin" : "Admin";
+        log.info("[OTP-FLOW] Triggering async email send to: {} for role: {}", user.getEmail(), roleDisplayName);
+        
         emailService.sendOtpEmail(user.getEmail(), otp, roleDisplayName);
         
-        log.info("Generated {} OTP for {} and sent via email", roleName, user.getEmail());
+        log.info("[OTP-FLOW] OTP flow completed for user: {}. Email will be sent asynchronously.", user.getUserCode());
         
         // Never reveal OTP in response for Super Admin and Admin
         return new OtpDispatchResponse(maskEmail(user.getEmail()), null);

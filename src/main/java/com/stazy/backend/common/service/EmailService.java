@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -19,25 +20,37 @@ public class EmailService {
         this.mailSender = mailSender;
     }
 
+    @Async
     public void sendOtpEmail(String toEmail, String otp, String roleName) {
+        log.info("[OTP-EMAIL] Starting async OTP email send to: {} for role: {}", toEmail, roleName);
         String subject = "Your " + roleName + " Login OTP - Stazy";
         String body = buildOtpEmailBody(otp, roleName);
         sendHtmlEmail(toEmail, subject, body);
+        log.info("[OTP-EMAIL] Completed async OTP email send to: {}", toEmail);
     }
 
+    @Async
     public void sendAdminHiredEmail(String toEmail, String adminId, String password, String secretCode, String cityName) {
+        log.info("[ADMIN-HIRED] Starting async admin hired email send to: {}", toEmail);
         String subject = "Welcome to Stazy - Admin Account Created";
         String body = buildAdminHiredEmailBody(adminId, password, secretCode, cityName);
         sendHtmlEmail(toEmail, subject, body);
+        log.info("[ADMIN-HIRED] Completed async admin hired email send to: {}", toEmail);
     }
 
+    @Async
     public void sendAdminRejectionEmail(String toEmail, String fullName) {
+        log.info("[ADMIN-REJECT] Starting async admin rejection email send to: {}", toEmail);
         String subject = "Stazy Admin Application Update";
         String body = buildAdminRejectionEmailBody(fullName);
         sendHtmlEmail(toEmail, subject, body);
+        log.info("[ADMIN-REJECT] Completed async admin rejection email send to: {}", toEmail);
     }
 
     private void sendHtmlEmail(String toEmail, String subject, String htmlBody) {
+        long startTime = System.currentTimeMillis();
+        log.info("[EMAIL-SEND] Attempting to send email to: {} with subject: {}", toEmail, subject);
+        
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
@@ -45,12 +58,24 @@ public class EmailService {
             helper.setSubject(subject);
             helper.setText(htmlBody, true);
             helper.setFrom("noreply@stazy.in");
+            
+            log.info("[EMAIL-SEND] Calling mailSender.send() for: {}", toEmail);
             mailSender.send(message);
-            log.info("Email sent successfully to: {}", toEmail);
+            
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("[EMAIL-SEND] ✅ Email sent successfully to: {} in {}ms", toEmail, duration);
+            
         } catch (MessagingException e) {
-            log.error("Failed to send email to: {}. Error: {}", toEmail, e.getMessage(), e);
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("[EMAIL-SEND] ❌ MessagingException sending email to: {} after {}ms. Error: {}", 
+                     toEmail, duration, e.getMessage(), e);
+            throw new RuntimeException("Failed to send email: " + e.getMessage(), e);
+            
         } catch (Exception e) {
-            log.error("Unexpected error sending email to: {}. Error: {}", toEmail, e.getMessage(), e);
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("[EMAIL-SEND] ❌ Unexpected error sending email to: {} after {}ms. Error: {}", 
+                     toEmail, duration, e.getMessage(), e);
+            throw new RuntimeException("Failed to send email: " + e.getMessage(), e);
         }
     }
 
