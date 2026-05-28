@@ -35,7 +35,7 @@ sendgrid:
   api:
     key: ${SENDGRID_API_KEY:}
   from:
-    email: ${SENDGRID_FROM_EMAIL:}
+    email: ${SENDGRID_FROM_EMAIL:noreply@stazy.in}
     name: ${SENDGRID_FROM_NAME:Stazy}
 
 server:
