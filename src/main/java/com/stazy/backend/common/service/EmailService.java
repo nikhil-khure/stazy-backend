@@ -23,10 +23,25 @@ public class EmailService {
     @Async
     public void sendOtpEmail(String toEmail, String otp, String roleName) {
         log.info("[OTP-EMAIL] Starting async OTP email send to: {} for role: {}", toEmail, roleName);
+        try {
+            String subject = "Your " + roleName + " Login OTP - Stazy";
+            String body = buildOtpEmailBody(otp, roleName);
+            sendHtmlEmail(toEmail, subject, body);
+            log.info("[OTP-EMAIL] Completed async OTP email send to: {}", toEmail);
+        } catch (Exception e) {
+            log.error("[OTP-EMAIL] ❌ CRITICAL: Failed to send OTP email to: {}. Error: {}", toEmail, e.getMessage(), e);
+            // Re-throw to trigger AsyncUncaughtExceptionHandler
+            throw e;
+        }
+    }
+    
+    // Synchronous version for testing SMTP configuration
+    public void sendOtpEmailSync(String toEmail, String otp, String roleName) {
+        log.info("[OTP-EMAIL-SYNC] Starting synchronous OTP email send to: {} for role: {}", toEmail, roleName);
         String subject = "Your " + roleName + " Login OTP - Stazy";
         String body = buildOtpEmailBody(otp, roleName);
         sendHtmlEmail(toEmail, subject, body);
-        log.info("[OTP-EMAIL] Completed async OTP email send to: {}", toEmail);
+        log.info("[OTP-EMAIL-SYNC] Completed synchronous OTP email send to: {}", toEmail);
     }
 
     @Async
